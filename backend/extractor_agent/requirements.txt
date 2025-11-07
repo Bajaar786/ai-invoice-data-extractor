@@ -1,0 +1,9 @@
+fastapi
+uvicorn[standard]
+pydantic
+pillow
+pytesseract
+google-cloud-aiplatform
+google-cloud-bigquery
+python-dotenv
+requests

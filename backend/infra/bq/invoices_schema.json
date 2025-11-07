@@ -1,0 +1,99 @@
+{
+  "fields": [
+    {
+      "name": "record_id",
+      "type": "STRING",
+      "mode": "REQUIRED"
+    },
+    {
+      "name": "invoice_number",
+      "type": "STRING",
+      "mode": "NULLABLE"
+    },
+    {
+      "name": "source_uri",
+      "type": "STRING",
+      "mode": "NULLABLE"
+    },
+    {
+      "name": "upload_time",
+      "type": "TIMESTAMP",
+      "mode": "NULLABLE"
+    },
+    {
+      "name": "document_language",
+      "type": "STRING",
+      "mode": "NULLABLE"
+    },
+    {
+      "name": "shipper",
+      "type": "STRING",
+      "mode": "NULLABLE"
+    },
+    {
+      "name": "consignee",
+      "type": "STRING",
+      "mode": "NULLABLE"
+    },
+    {
+      "name": "origin_country",
+      "type": "STRING",
+      "mode": "NULLABLE"
+    },
+    {
+      "name": "destination_country",
+      "type": "STRING",
+      "mode": "NULLABLE"
+    },
+    {
+      "name": "item_descriptions",
+      "type": "STRING",
+      "mode": "NULLABLE"
+    },
+    {
+      "name": "total_value_raw",
+      "type": "FLOAT",
+      "mode": "NULLABLE"
+    },
+    {
+      "name": "currency_code",
+      "type": "STRING",
+      "mode": "NULLABLE"
+    },
+    {
+      "name": "total_value_usd",
+      "type": "FLOAT",
+      "mode": "NULLABLE"
+    },
+    {
+      "name": "hs_assigned",
+      "type": "STRING",
+      "mode": "NULLABLE"
+    },
+    {
+      "name": "risk_score",
+      "type": "FLOAT",
+      "mode": "NULLABLE"
+    },
+    {
+      "name": "risk_reasons",
+      "type": "STRING",
+      "mode": "REPEATED"
+    },
+    {
+      "name": "ocr_engine",
+      "type": "STRING",
+      "mode": "NULLABLE"
+    },
+    {
+      "name": "ocr_confidence",
+      "type": "FLOAT",
+      "mode": "NULLABLE"
+    },
+    {
+      "name": "processing_metadata",
+      "type": "JSON",
+      "mode": "NULLABLE"
+    }
+  ]
+}
