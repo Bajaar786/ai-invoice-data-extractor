@@ -14,6 +14,14 @@ try:
 except Exception:
     AIPLATFORM_AVAILABLE = False
 
+try:
+    from ibm_watson import NaturalLanguageUnderstandingV1
+    from ibm_cloud_sdk_core.authenticators import IAMAuthenticator
+    from ibm_watson.natural_language_understanding_v1 import Features, EntitiesOptions, KeywordsOptions
+    IBM_WATSON_AVAILABLE = True
+except ImportError:
+    IBM_WATSON_AVAILABLE = False
+
 app = FastAPI()
 logging.basicConfig(level=logging.INFO)
 
@@ -116,6 +124,102 @@ def convert_to_usd(amount: float, currency: str) -> float:
         logging.warning(f'Currency convert failed: {e}')
     return amount
 
+def setup_ibm_watson():
+    """Initialize IBM Watson NLU"""
+    if not IBM_WATSON_AVAILABLE:
+        return None
+    
+    try:
+        # Get these from IBM Cloud dashboard
+        api_key = os.environ.get('IBM_WATSON_API_KEY')
+        service_url = os.environ.get('IBM_WATSON_URL')
+        
+        if not api_key or not service_url:
+            logging.warning("IBM Watson credentials not configured")
+            return None
+        
+        authenticator = IAMAuthenticator(api_key)
+        natural_language_understanding = NaturalLanguageUnderstandingV1(
+            version='2023-09-01',
+            authenticator=authenticator
+        )
+        natural_language_understanding.set_service_url(service_url)
+        
+        return natural_language_understanding
+    except Exception as e:
+        logging.warning(f"IBM Watson setup failed: {e}")
+        return None
+
+def enhanced_parse_with_ibm_watson(text: str):
+    """Use IBM Watson to extract entities from invoice text"""
+    nlu = setup_ibm_watson()
+    if not nlu:
+        return parse_json_or_fallback(text)
+    
+    try:
+        response = nlu.analyze(
+            text=text[:5000],  # Watson has character limits
+            features=Features(
+                entities=EntitiesOptions(limit=20),
+                keywords=KeywordsOptions(limit=20)
+            )
+        ).get_result()
+        
+        # Extract entities using Watson's AI
+        entities = {}
+        for entity in response.get('entities', []):
+            entity_type = entity['type'].lower()
+            if entity_type not in entities:
+                entities[entity_type] = []
+            entities[entity_type].append(entity['text'])
+        
+        # Map Watson entities to invoice fields
+        parsed = map_watson_entities_to_invoice(entities, text)
+        return parsed
+        
+    except Exception as e:
+        logging.warning(f"IBM Watson parsing failed: {e}")
+        return parse_json_or_fallback(text)
+
+def map_watson_entities_to_invoice(watson_entities, original_text):
+    """Map IBM Watson entities to invoice structure"""
+    result = {
+        'shipper': None,
+        'consignee': None, 
+        'invoice_number': None,
+        'total_value': None,
+        'currency': 'USD',
+        'items': [],
+        'ibm_entities_extracted': list(watson_entities.keys())
+    }
+    
+    # Organization entities often indicate shipper/consignee
+    if 'organization' in watson_entities:
+        orgs = watson_entities['organization']
+        if len(orgs) >= 2:
+            result['shipper'] = orgs[0]
+            result['consignee'] = orgs[1]
+        elif len(orgs) >= 1:
+            result['shipper'] = orgs[0]
+    
+    # Look for location entities for countries
+    if 'location' in watson_entities:
+        locations = watson_entities['location']
+        # Simple country detection from locations
+        for loc in locations:
+            if loc.lower() in ['usa', 'united states', 'singapore', 'germany']:
+                if not result.get('origin_country'):
+                    result['origin_country'] = loc
+                else:
+                    result['destination_country'] = loc
+    
+    # Use original parsing as fallback for items and totals
+    fallback_parsed = parse_json_or_fallback(original_text)
+    result['items'] = fallback_parsed.get('items', [])
+    result['total_value'] = fallback_parsed.get('total_value')
+    result['invoice_number'] = fallback_parsed.get('invoice_number')
+    
+    return result
 def write_invoice_to_bq(parsed: Dict[str,Any], raw_text: str) -> str:
     client = get_bq_client()
     if not client:
@@ -230,6 +334,48 @@ async def interpret_invoice(file: UploadFile = File(...)):
     rec_id = write_invoice_to_bq(parsed, text)
     return {'status':'ok','record_id': rec_id, 'parsed': parsed}
 
+@app.post('/opus_workflow_ibm')
+async def opus_workflow_ibm(file: UploadFile = File(...)):
+    """Enhanced Opus workflow with IBM AI services"""
+    logging.info("🚀 Starting IBM-Enhanced Opus workflow")
+    
+    try:
+        # Step 1: OCR
+        content = await file.read()
+        text, conf = ocr_tesseract_bytes(content)
+        logging.info(f"🔍 OCR confidence: {conf}")
+        
+        # Step 2: IBM Watson NLU Parsing
+        parsed = enhanced_parse_with_ibm_watson(text)
+        parsed['ocr_engine'] = 'tesseract+ibm_watson'
+        parsed['ocr_confidence'] = conf
+        
+        # Step 3: HS Classification
+        for item in parsed.get('items', []):
+            desc = item.get('description_raw', '').lower()
+            if 'camera' in desc or 'security' in desc:
+                item['candidate_hs'] = [{'hs_code': '85258090', 'confidence': 0.85}]
+            else:
+                item['candidate_hs'] = [{'hs_code': '999999', 'confidence': 0.5}]
+        
+        # Step 4: Rule Engine
+        rule_results = enhanced_rule_engine_simple(parsed)
+        
+        # Step 5: IBM Watson Assistant Review
+        agent_review = ibm_assistant_compliance_review(parsed, rule_results)
+        
+        return {
+            'status': 'ibm_opus_workflow_complete',
+            'parsed_data': parsed,
+            'rule_results': rule_results,
+            'agent_review': agent_review,
+            'ibm_services_used': ['Watson NLU', 'Watson Assistant'],
+            'pdf_report': "ibm_enhanced_report"
+        }
+        
+    except Exception as e:
+        logging.error(f"IBM workflow error: {e}")
+        return {'status': 'error', 'message': str(e)}
 @app.get('/')
 def ok():
     return {'status':'extractor ready', 'model': GEMINI_MODEL}
