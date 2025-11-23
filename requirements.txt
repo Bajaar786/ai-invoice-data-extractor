@@ -7,3 +7,5 @@ google-cloud-aiplatform
 google-cloud-bigquery
 python-dotenv
 requests
+ibm-watson==7.0.1
+ibm-cloud-sdk-core==3.16.6
